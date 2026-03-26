@@ -1,16 +1,38 @@
 # frozen_string_literal: true
 
 require "rails_helper"
+require "securerandom"
 
 describe RetortsController do
+  def unique_value(prefix)
+    "#{prefix.to_s[0, 8]}#{SecureRandom.hex(3)}"
+  end
+
+  def create_user(prefix, fabricator = :user)
+    token = unique_value(prefix)
+    Fabricate(fabricator, username: token, email: "#{token}@example.com")
+  end
+
+  def create_category(prefix)
+    token = unique_value(prefix)
+    Fabricate(:category, user: create_user("catown"), name: "category-#{token}", slug: "category-#{token}")
+  end
+
   describe "normal user" do
     include ActiveSupport::Testing::TimeHelpers
-    let(:user) { Fabricate(:user) }
-    let(:disabled_category) { Fabricate :category }
-    let(:topic) { Fabricate :topic, category: Fabricate(:category) }
-    let(:another_topic) { Fabricate :topic, category: disabled_category }
-    let(:first_post) { Fabricate :post, topic: topic }
-    let(:another_post) { Fabricate :post, topic: another_topic }
+    let(:user) { create_user("user") }
+    let(:topic_owner) { create_user("topic-owner") }
+    let(:disabled_category) { create_category("disabled") }
+    let(:topic) do
+      Fabricate(:topic, user: topic_owner, category: create_category("topic"), title: "Retort topic #{unique_value("title")}")
+    end
+    let(:another_topic) do
+      Fabricate(:topic, user: topic_owner, category: disabled_category, title: "Retort topic #{unique_value("alt")}")
+    end
+    let(:first_post) { Fabricate(:post, topic: topic, user: topic_owner, raw: "first post #{unique_value("post")}") }
+    let(:another_post) do
+      Fabricate(:post, topic: another_topic, user: topic_owner, raw: "another post #{unique_value("post")}")
+    end
 
     context "when create retort" do
       before(:example) do
@@ -244,10 +266,20 @@ describe RetortsController do
   end
 
   describe "staff user" do
-    let(:staff) { Fabricate(:moderator) }
-    let(:first_post) { Fabricate(:post) }
-    let(:user) { Fabricate(:user) }
-    let(:another_user) { Fabricate(:user) }
+    let(:staff) { create_user("staff", :moderator) }
+    let(:post_owner) { create_user("postown") }
+    let(:first_post) do
+      topic =
+        Fabricate(
+          :topic,
+          user: post_owner,
+          category: create_category("staff"),
+          title: "Retort topic #{unique_value("staff")}",
+        )
+      Fabricate(:post, topic: topic, user: post_owner, raw: "staff post #{unique_value("post")}")
+    end
+    let(:user) { create_user("user") }
+    let(:another_user) { create_user("another") }
 
     context "when remove retort" do
       let(:emoji) { "heart" }

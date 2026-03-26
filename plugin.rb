@@ -2,7 +2,7 @@
 
 # name: retort
 # about: Reactions plugin for Discourse
-# version: 1.5.0
+# version: 1.5.1
 # authors: Jiajun Du, pangbo. original: James Kiesel (gdpelican)
 # url: https://github.com/ShuiyuanSJTU/retort
 
@@ -41,6 +41,10 @@ after_initialize do
     ::Chat::ChatController.include(DiscourseRetort::OverrideChatController)
   end
 
+  on(:merging_users) do |source_user, target_user|
+    DiscourseRetort::UserMerger.merge(source_user, target_user)
+  end
+
   register_stat("retort", expose_via_api: true) do
     {
       :last_day => Retort.where("created_at > ?", 1.days.ago).count,
@@ -57,6 +61,14 @@ module ::DiscourseRetort
   module OverrideUser
     def self.included(klass)
       klass.has_many :retorts, dependent: :destroy
+      klass.before_destroy :retort_cleanup_before_destroy
+    end
+
+    private
+
+    def retort_cleanup_before_destroy
+      Retort.only_deleted.where(user_id: id).destroy_all
+      Retort.with_deleted.where(deleted_by_id: id).update_all(deleted_by_id: Discourse.system_user.id)
     end
   end
 

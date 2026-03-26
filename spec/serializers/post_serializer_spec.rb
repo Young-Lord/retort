@@ -1,9 +1,27 @@
 # frozen_string_literal: true
 
+require "rails_helper"
+require "securerandom"
+
 RSpec.describe PostSerializer do
-  let(:post) { Fabricate(:post, topic: Fabricate(:topic, category: Fabricate(:category))) }
-  let(:user1) { Fabricate(:user) }
-  let(:user2) { Fabricate(:user) }
+  def unique_value(prefix)
+    "#{prefix}#{SecureRandom.hex(4)}"
+  end
+
+  def create_user(prefix)
+    token = unique_value(prefix)
+    Fabricate(:user, username: token, email: "#{token}@example.com")
+  end
+
+  let(:post_owner) { create_user("owner") }
+  let(:post) do
+    token = unique_value("serializer")
+    category = Fabricate(:category, user: post_owner, name: "category-#{token}", slug: "category-#{token}")
+    topic = Fabricate(:topic, user: post_owner, category: category, title: "Serializer topic #{token}")
+    Fabricate(:post, topic: topic, user: post_owner, raw: "Serializer body #{token}")
+  end
+  let(:user1) { create_user("user1") }
+  let(:user2) { create_user("user2") }
 
   before(:example) do
     Retort.create(post_id: post.id, user_id: user1.id, emoji: "heart")
@@ -62,8 +80,9 @@ RSpec.describe PostSerializer do
     end
 
     it "should be true for staff" do
+      staff = Fabricate(:admin, username: unique_value("admin"), email: "#{unique_value("admin")}@example.com")
       expect(
-        PostSerializer.new(post, scope: Guardian.new(Fabricate(:admin))).as_json[:post][
+        PostSerializer.new(post, scope: Guardian.new(staff)).as_json[:post][
           :can_remove_retort
         ],
       ).to eq(true)

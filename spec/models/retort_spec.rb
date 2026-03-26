@@ -1,15 +1,36 @@
 # frozen_string_literal: true
 
 require "rails_helper"
+require "securerandom"
 
 describe Retort do
+  def unique_value(prefix)
+    "#{prefix.to_s[0, 8]}#{SecureRandom.hex(3)}"
+  end
+
+  def create_user(prefix)
+    token = unique_value(prefix)
+    Fabricate(:user, username: token, email: "#{token}@example.com")
+  end
+
+  def create_topic(owner:)
+    Fabricate(:topic, user: owner, category: Fabricate(:category, user: owner), title: "Retort topic #{unique_value("title")}")
+  end
+
   before(:example) {}
 
-  let(:user) { Fabricate :user }
-  let(:topic) { Fabricate :topic }
-  let(:post) { Fabricate :post, topic: topic }
-  let(:another_post) { Fabricate :post, topic: topic }
-  let(:another_topic_post) { Fabricate :post }
+  let(:user) { create_user("user") }
+  let(:topic_owner) { create_user("owner") }
+  let(:topic) { create_topic(owner: topic_owner) }
+  let(:post) { Fabricate(:post, topic: topic, user: topic_owner, raw: "retort post #{unique_value("post")}") }
+  let(:another_post) do
+    Fabricate(:post, topic: topic, user: topic_owner, raw: "retort post #{unique_value("post")}")
+  end
+  let(:another_topic_post) do
+    another_owner = create_user("owner")
+    another_topic = create_topic(owner: another_owner)
+    Fabricate(:post, topic: another_topic, user: another_owner, raw: "retort post #{unique_value("post")}")
+  end
   let(:emoji) { "kickbutt" }
   let(:altermoji) { "puntrear" }
 
