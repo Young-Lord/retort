@@ -59,7 +59,8 @@ module DiscourseRetort
     end
 
     def target_retorts
-      @target_retorts ||= Retort.with_deleted.where(user_id: target_user.id).index_by { |retort| key_for(retort) }
+      @target_retorts ||=
+        Retort.with_deleted.where(user_id: target_user.id).index_by { |retort| key_for(retort) }
     end
 
     def key_for(retort)

@@ -68,7 +68,10 @@ module ::DiscourseRetort
 
     def retort_cleanup_before_destroy
       Retort.only_deleted.where(user_id: id).destroy_all
-      Retort.with_deleted.where(deleted_by_id: id).update_all(deleted_by_id: Discourse.system_user.id)
+      Retort
+        .with_deleted
+        .where(deleted_by_id: id)
+        .update_all(deleted_by_id: Discourse.system_user.id)
     end
   end
 

@@ -16,8 +16,10 @@ RSpec.describe PostSerializer do
   let(:post_owner) { create_user("owner") }
   let(:post) do
     token = unique_value("serializer")
-    category = Fabricate(:category, user: post_owner, name: "category-#{token}", slug: "category-#{token}")
-    topic = Fabricate(:topic, user: post_owner, category: category, title: "Serializer topic #{token}")
+    category =
+      Fabricate(:category, user: post_owner, name: "category-#{token}", slug: "category-#{token}")
+    topic =
+      Fabricate(:topic, user: post_owner, category: category, title: "Serializer topic #{token}")
     Fabricate(:post, topic: topic, user: post_owner, raw: "Serializer body #{token}")
   end
   let(:user1) { create_user("user1") }
@@ -30,7 +32,7 @@ RSpec.describe PostSerializer do
   end
 
   describe "#retorts" do
-    it "should add retort" do
+    it "serializes retorts grouped by emoji" do
       post_serializer = PostSerializer.new(post, scope: Guardian.new).as_json[:post]
       expect(post_serializer[:retorts].length).to eq(2)
       expect(post_serializer[:retorts][0][:emoji]).to eq("heart")
@@ -39,7 +41,7 @@ RSpec.describe PostSerializer do
       expect(post_serializer[:retorts][1][:usernames]).to eq([user1.username])
     end
 
-    it "should use cache" do
+    it "reuses the cached retort payload" do
       PostSerializer.new(post, scope: Guardian.new).as_json
       Retort.expects(:where).never
       PostSerializer.new(post, scope: Guardian.new).as_json
@@ -47,44 +49,47 @@ RSpec.describe PostSerializer do
   end
 
   describe "#my_retorts" do
-    it "should add my retorts" do
+    it "serializes the current user's retorts" do
       post_serializer = PostSerializer.new(post, scope: Guardian.new(user1)).as_json[:post]
       expect(post_serializer[:my_retorts].length).to eq(2)
       expect(post_serializer[:my_retorts].pluck(:emoji)).to match_array(%w[heart +1])
       expect(post_serializer[:my_retorts].pluck(:updated_at).compact.length).to eq(2)
     end
 
-    it "should be empty for anonymous" do
+    it "returns an empty list for anonymous users" do
       post_serializer = PostSerializer.new(post, scope: Guardian.new).as_json[:post]
       expect(post_serializer[:my_retorts]).to eq([])
     end
   end
 
   describe "#can_retort" do
-    it "should be true for normal user" do
+    it "returns true for a signed-in user" do
       expect(
         PostSerializer.new(post, scope: Guardian.new(user1)).as_json[:post][:can_retort],
       ).to eq(true)
     end
 
-    it "should be false for anonymous" do
+    it "returns false for anonymous users" do
       expect(PostSerializer.new(post, scope: Guardian.new).as_json[:post][:can_retort]).to eq(false)
     end
   end
 
   describe "#can_remove_retort" do
-    it "should be false for normal user" do
+    it "returns false for non-staff users" do
       expect(
         PostSerializer.new(post, scope: Guardian.new(user1)).as_json[:post][:can_remove_retort],
       ).to eq(false)
     end
 
-    it "should be true for staff" do
-      staff = Fabricate(:admin, username: unique_value("admin"), email: "#{unique_value("admin")}@example.com")
+    it "returns true for staff users" do
+      staff =
+        Fabricate(
+          :admin,
+          username: unique_value("admin"),
+          email: "#{unique_value("admin")}@example.com",
+        )
       expect(
-        PostSerializer.new(post, scope: Guardian.new(staff)).as_json[:post][
-          :can_remove_retort
-        ],
+        PostSerializer.new(post, scope: Guardian.new(staff)).as_json[:post][:can_remove_retort],
       ).to eq(true)
     end
   end

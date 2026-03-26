@@ -15,44 +15,66 @@ describe RetortsController do
 
   def create_category(prefix)
     token = unique_value(prefix)
-    Fabricate(:category, user: create_user("catown"), name: "category-#{token}", slug: "category-#{token}")
+    Fabricate(
+      :category,
+      user: create_user("catown"),
+      name: "category-#{token}",
+      slug: "category-#{token}",
+    )
   end
 
-  describe "normal user" do
+  describe "as a regular user" do
     include ActiveSupport::Testing::TimeHelpers
     let(:user) { create_user("user") }
     let(:topic_owner) { create_user("topic-owner") }
     let(:disabled_category) { create_category("disabled") }
     let(:topic) do
-      Fabricate(:topic, user: topic_owner, category: create_category("topic"), title: "Retort topic #{unique_value("title")}")
+      Fabricate(
+        :topic,
+        user: topic_owner,
+        category: create_category("topic"),
+        title: "Retort topic #{unique_value("title")}",
+      )
     end
     let(:another_topic) do
-      Fabricate(:topic, user: topic_owner, category: disabled_category, title: "Retort topic #{unique_value("alt")}")
+      Fabricate(
+        :topic,
+        user: topic_owner,
+        category: disabled_category,
+        title: "Retort topic #{unique_value("alt")}",
+      )
     end
-    let(:first_post) { Fabricate(:post, topic: topic, user: topic_owner, raw: "first post #{unique_value("post")}") }
+    let(:first_post) do
+      Fabricate(:post, topic: topic, user: topic_owner, raw: "first post #{unique_value("post")}")
+    end
     let(:another_post) do
-      Fabricate(:post, topic: another_topic, user: topic_owner, raw: "another post #{unique_value("post")}")
+      Fabricate(
+        :post,
+        topic: another_topic,
+        user: topic_owner,
+        raw: "another post #{unique_value("post")}",
+      )
     end
 
-    context "when create retort" do
+    context "when creating a retort" do
       before(:example) do
         SiteSetting.retort_disabled_emojis = "+1|laughing"
         SiteSetting.retort_disabled_categories = disabled_category.id.to_s
       end
 
-      it "can not create without sign in" do
+      it "rejects requests from anonymous users" do
         put "/retorts/#{first_post.id}.json", params: { retort: "heart" }
         expect(response.status).to eq(403)
         expect(Retort.find_by(post_id: first_post.id, emoji: "heart")).to be_nil
       end
 
-      it "can not create on invalid post" do
+      it "rejects requests for a missing post" do
         sign_in(user)
         put "/retorts/100000.json", params: { retort: "heart" }
         expect(response.status).to eq(403)
       end
 
-      it "can create on normal post" do
+      it "creates a retort on an allowed post" do
         time = Time.new(2024, 12, 25, 01, 04, 44)
         travel_to time do
           sign_in(user)
@@ -67,13 +89,13 @@ describe RetortsController do
         expect(new_retort.deleted_at).to be_nil
       end
 
-      it "can not create on disabled category post" do
+      it "rejects posts in disabled categories" do
         sign_in(user)
         put "/retorts/#{another_post.id}.json", params: { retort: "heart" }
         expect(response.status).to eq(403)
       end
 
-      it "can not create on disabled emoji" do
+      it "rejects disabled emojis" do
         sign_in(user)
         put "/retorts/#{first_post.id}.json", params: { retort: "+1" }
         expect(response.status).to eq(422)
@@ -87,28 +109,28 @@ describe RetortsController do
            )
       end
 
-      it "can not create invalid emoji" do
+      it "rejects invalid emojis" do
         sign_in(user)
         put "/retorts/#{first_post.id}.json", params: { retort: "invalid__" }
         expect(response.status).to eq(422)
         expect(JSON.parse(response.body)["errors"].first).to eq I18n.t("retort.error.missing_emoji")
       end
 
-      it "can not create on archived post" do
+      it "rejects archived topics" do
         first_post.topic.update(archived: true)
         sign_in(user)
         put "/retorts/#{first_post.id}.json", params: { retort: "heart" }
         expect(response.status).to eq(403)
       end
 
-      it "can not create by silenced user" do
+      it "rejects silenced users" do
         user.update(silenced_till: 1.day.from_now)
         sign_in(user)
         put "/retorts/#{first_post.id}.json", params: { retort: "heart" }
         expect(response.status).to eq(403)
       end
 
-      it "can resolve alias emoji" do
+      it "normalizes emoji aliases before saving" do
         sign_in(user)
         put "/retorts/#{first_post.id}.json", params: { retort: "xray" }
         expect(response.status).to eq(200)
@@ -118,7 +140,7 @@ describe RetortsController do
       end
     end
 
-    context "when withdraw retort" do
+    context "when withdrawing a retort" do
       let(:time) { Time.new(2024, 12, 25, 01, 04, 44) }
       let(:emoji) { "heart" }
 
@@ -129,7 +151,7 @@ describe RetortsController do
         end
       end
 
-      it "can withdraw within tolerance" do
+      it "withdraws within the configured tolerance" do
         travel_to time + 1.seconds do
           sign_in(user)
           delete "/retorts/#{first_post.id}.json", params: { retort: emoji }
@@ -142,7 +164,7 @@ describe RetortsController do
         expect(retort.created_at).to eq_time time
       end
 
-      it "can not withdraw exceed tolerance" do
+      it "rejects withdrawals after the tolerance window" do
         travel_to time + 11.seconds do
           sign_in(user)
           delete "/retorts/#{first_post.id}.json", params: { retort: emoji }
@@ -154,7 +176,7 @@ describe RetortsController do
       end
     end
 
-    context "when recover retort" do
+    context "when recovering a retort" do
       let(:time) { Time.new(2024, 12, 25, 01, 04, 44) }
       let(:emoji) { "heart" }
 
@@ -165,7 +187,7 @@ describe RetortsController do
         end
       end
 
-      it "can recover" do
+      it "recovers a withdrawn retort" do
         travel_to time + 1.seconds do
           sign_in(user)
           put "/retorts/#{first_post.id}.json", params: { retort: emoji }
@@ -179,7 +201,7 @@ describe RetortsController do
         expect(retort.created_at).to eq_time time
       end
 
-      it "can recover even if exceed tolerance" do
+      it "allows recovery after the withdrawal tolerance expires" do
         travel_to time + 11.seconds do
           sign_in(user)
           put "/retorts/#{first_post.id}.json", params: { retort: emoji }
@@ -194,7 +216,7 @@ describe RetortsController do
       end
     end
 
-    context "when withdraw after recover" do
+    context "when withdrawing after recovery" do
       let(:time) { Time.new(2024, 12, 25, 01, 04, 44) }
       let(:emoji) { "heart" }
 
@@ -211,7 +233,7 @@ describe RetortsController do
         end
       end
 
-      it "can withdraw within tolerance" do
+      it "allows withdrawal within the refreshed tolerance window" do
         travel_to time + 7.seconds do
           sign_in(user)
           delete "/retorts/#{first_post.id}.json", params: { retort: emoji }
@@ -224,7 +246,7 @@ describe RetortsController do
         expect(retort.created_at).to eq_time time
       end
 
-      it "can withdraw as tolerance is counted from last recovery" do
+      it "resets the withdrawal tolerance after recovery" do
         travel_to time + 12.seconds do
           sign_in(user)
           delete "/retorts/#{first_post.id}.json", params: { retort: emoji }
@@ -238,7 +260,7 @@ describe RetortsController do
         expect(retort.created_at).to eq_time time
       end
 
-      it "can not withdraw exceed tolerance" do
+      it "rejects withdrawal after the refreshed tolerance window" do
         travel_to time + 17.seconds do
           sign_in(user)
           delete "/retorts/#{first_post.id}.json", params: { retort: emoji }
@@ -252,8 +274,8 @@ describe RetortsController do
       end
     end
 
-    context "when remove retort" do
-      it "can not remove" do
+    context "when removing all retorts for an emoji" do
+      it "rejects non-staff bulk removal" do
         Retort.create(post_id: first_post.id, user_id: user.id, emoji: "heart")
         sign_in(user)
         delete "/retorts/#{first_post.id}/all.json", params: { retort: "heart" }
@@ -265,7 +287,7 @@ describe RetortsController do
     end
   end
 
-  describe "staff user" do
+  describe "as staff" do
     let(:staff) { create_user("staff", :moderator) }
     let(:post_owner) { create_user("postown") }
     let(:first_post) do
@@ -281,7 +303,7 @@ describe RetortsController do
     let(:user) { create_user("user") }
     let(:another_user) { create_user("another") }
 
-    context "when remove retort" do
+    context "when removing all retorts for an emoji" do
       let(:emoji) { "heart" }
 
       before(:example) do
@@ -289,7 +311,7 @@ describe RetortsController do
         Retort.create(post_id: first_post.id, user_id: another_user.id, emoji: emoji)
       end
 
-      it "can remove" do
+      it "removes all matching retorts" do
         sign_in(staff)
         delete "/retorts/#{first_post.id}/all.json", params: { retort: emoji }
         expect(response.status).to eq(200)
@@ -300,7 +322,7 @@ describe RetortsController do
             )
       end
 
-      it "can not recover after removed by staff" do
+      it "does not let other users recover a retort after staff removal" do
         Retort.find_by(post_id: first_post.id, user_id: user.id, emoji: emoji).trash!(user)
         sign_in(staff)
         delete "/retorts/#{first_post.id}/all.json", params: { retort: emoji }
